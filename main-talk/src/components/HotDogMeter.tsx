@@ -1,7 +1,7 @@
 "use client";
 import { Sentiment } from "@/app/page";
 import { createClient } from "@/utils/supabase/client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 type THotDogMeter = {
   sentiments: Sentiment[];
@@ -9,7 +9,31 @@ type THotDogMeter = {
 
 function HotDogMeter({ sentiments }: THotDogMeter) {
   const supabase = createClient();
+
   const [sentimentsData, setSentimentsData] = useState(sentiments);
+
+  const minVal = 0;
+  const maxVal = 100;
+  const startValue = 50;
+
+  const calculateSentimentValue = (goodCount: number, badCount: number) => {
+    const total = goodCount + badCount;
+    if (total <= 0) {
+      return startValue;
+    }
+    const goodRatio = goodCount / total;
+    return minVal + (maxVal - minVal) * goodRatio;
+  };
+
+  const sentimentValue = useMemo(() => {
+    const goodSentiments = sentimentsData.filter(
+      (s) => s.value === "good"
+    ).length;
+    const badSentiments = sentimentsData.filter(
+      (s) => s.value === "bad"
+    ).length;
+    return calculateSentimentValue(goodSentiments, badSentiments);
+  }, [sentimentsData]);
 
   useEffect(() => {
     const sentimentChannel = supabase
@@ -32,28 +56,10 @@ function HotDogMeter({ sentiments }: THotDogMeter) {
       )
       .subscribe();
 
-    return () => supabase.removeChannel(sentimentChannel);
-  }, []);
-
-  const totalSentiments = sentiments.length || 0;
-  const goodSentiments =
-    sentiments.filter((sentiment) => sentiment.value === "good").length || 0;
-  console.log("goodSentiments", goodSentiments);
-  const badSentiments =
-    sentiments.filter((sentiment) => sentiment.value === "bad").length || 0;
-  console.log("badSentiments", badSentiments);
-
-  let sentimentValue = 50;
-
-  if (totalSentiments > 0) {
-    // Calculate the deviation from the balanced start value
-    const goodSentimentRatio = (goodSentiments / totalSentiments) * 50; // good sentiments contribute positively
-    const badSentimentRatio = (badSentiments / totalSentiments) * 50; // bad sentiments contribute negatively
-
-    // Adjust the sentiment value based on the good and bad sentiment ratios
-    sentimentValue = 50 + goodSentimentRatio - badSentimentRatio;
-  }
-  console.log("sentimentValue", sentimentValue);
+    return () => {
+      supabase.removeChannel(sentimentChannel);
+    };
+  }, [supabase]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -69,11 +75,9 @@ function HotDogMeter({ sentiments }: THotDogMeter) {
         </label>
         <meter
           id="sentiment"
-          min={0}
-          max={100}
+          min={minVal}
+          max={maxVal}
           value={sentimentValue}
-          high={55}
-          low={45}
           className="w-full"
         />
         <p>
@@ -82,6 +86,9 @@ function HotDogMeter({ sentiments }: THotDogMeter) {
           </span>
         </p>
       </div>
+      <h2 className="font-semibold">
+        Number of Total Votes {sentimentsData.length}
+      </h2>
     </div>
   );
 }
